@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import 'lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol';
+import "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "./lib/Errors.sol";
 
 contract SwapContract {
     address public owner;
@@ -15,45 +16,38 @@ contract SwapContract {
 
     mapping(address => Swapper) swappers;
 
-    error InsufficientKWAG(address caller, uint amount);
-    error InsufficientBLT(address caller, uint amount);
-
     constructor(address _tokenKWAG, address _tokenBLT) {
         tokenKWAG = _tokenKWAG;
         tokenBLT = _tokenBLT;
         owner = msg.sender;
     }
 
-    function KWAGToBLT(uint _amountKWAG) external {
-        if (IERC20(tokenKWAG).balanceOf(msg.sender) < _amountKWAG) revert InsufficientKWAG(msg.sender, _amountKWAG);
+    function swapToken(uint _amount, address _token) external {
+        if (_token != tokenKWAG && _token != tokenBLT)
+            revert Errors.InvalidToken();
+        if (IERC20(_token).balanceOf(msg.sender) <= _amount)
+            revert Errors.InsufficientBalance();
 
-        IERC20(tokenKWAG).transferFrom(msg.sender, address(this), _amountKWAG);
-        uint logic = _amountKWAG * 3; 
+        IERC20(_token).transferFrom(msg.sender, address(this), _amount);
 
-        if (IERC20(tokenBLT).balanceOf(address(this)) < logic) revert InsufficientBLT(address(this), logic);
-
-        IERC20(tokenBLT).transfer(msg.sender, logic);
-
-        swappers[msg.sender].hasSwaped = true;
-        swappers[msg.sender].numberOfSwaps++;
-    }
-
-    function BLTToKWAG(uint _amountBLT) external {
-        if (IERC20(tokenBLT).balanceOf(msg.sender) < _amountBLT) revert InsufficientBLT(msg.sender, _amountBLT);
-
-        IERC20(tokenBLT).transferFrom(msg.sender, address(this), _amountBLT);
-        uint logic = _amountBLT * 2; 
-
-        if (IERC20(tokenKWAG).balanceOf(address(this)) < logic) revert InsufficientKWAG(address(this), logic);
-
-        IERC20(tokenKWAG).transfer(msg.sender, logic);
+        if (_token == tokenKWAG) {
+            if (IERC20(tokenBLT).balanceOf(address(this)) < _amount * 3)
+                revert Errors.InsufficientBLT();
+            IERC20(tokenBLT).transfer(msg.sender, _amount * 3);
+        } else {
+            if (IERC20(tokenKWAG).balanceOf(address(this)) < _amount * 2)
+                revert Errors.InsufficientKWAG();
+            IERC20(tokenKWAG).transfer(msg.sender, _amount * 2);
+        }
 
         swappers[msg.sender].hasSwaped = true;
         swappers[msg.sender].numberOfSwaps++;
     }
 
-    function getSwapper(address _swapper) external view returns (Swapper memory) {
-        return swappers[_swapper];
+    function getSwapper(
+        address _user
+    ) external view returns (bool hasSwaped, uint256 numberOfSwaps) {
+        Swapper memory swapper = swappers[_user];
+        return (swapper.hasSwaped, swapper.numberOfSwaps);
     }
 }
-
